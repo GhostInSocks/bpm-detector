@@ -16,13 +16,13 @@ def nalozi_zvok(pot_do_datoteke):
 
     return y, int(sr)
 
-def filtriraj_base(y, sr, mejna_frekvenca=150.0):
+def filter_base(y, sr, mejna_frekvenca=150.0):
     nyq = sr / 2.0
     b, a = signal.butter(4, mejna_frekvenca / nyq, btype='low')
     filtriran_signal = signal.lfilter(b, a, y)
     return filtriran_signal.astype(np.float32)
 
-def izracunaj_stft_rocno(y, n_fft=2048, hop=512):
+def izracun_stft(y, n_fft=2048, hop=512):
     okno = np.hanning(n_fft)
     stevilo_oken = 1 + (len(y) - n_fft) // hop
     matrika_spektra = np.zeros((n_fft // 2 + 1, stevilo_oken), dtype=np.float32)
@@ -37,7 +37,7 @@ def izracunaj_stft_rocno(y, n_fft=2048, hop=512):
 
     return matrika_spektra
 
-def izracunaj_spektralni_pretok(matrika_spektra):
+def izracun_spektralni_pretok(matrika_spektra):
     razlika = np.diff(matrika_spektra, axis=1)
     samo_porast_energije = np.maximum(0.0, razlika)
     ovojnica_novosti = np.sum(samo_porast_energije, axis=0)
@@ -46,7 +46,7 @@ def izracunaj_spektralni_pretok(matrika_spektra):
 
     return ovojnica_novosti
 
-def ugotovi_bpm(ovojnica_novosti, sr, hop):
+def izracun_bpm(ovojnica_novosti, sr, hop):
     avtokorelacija = np.correlate(ovojnica_novosti, ovojnica_novosti, mode='full')
     sredina = len(ovojnica_novosti) - 1
     desna_stran = avtokorelacija[sredina:]
@@ -60,7 +60,7 @@ def ugotovi_bpm(ovojnica_novosti, sr, hop):
     bpm = 60.0 * okna_na_sekundo / tau_optimalen
     return bpm, tau_optimalen
 
-def poisci_točne_udarce(ovojnica_novosti, tau, sr, hop):
+def search_udarce(ovojnica_novosti, tau, sr, hop):
     dolzina = len(ovojnica_novosti)
     zacetek = int(np.argmax(ovojnica_novosti[:tau]))
     udarci_v_oknih = []
@@ -94,7 +94,7 @@ def ustvari_zvok_metronoma(udarci_v_sekundah, sr, celotna_dolzina):
 
     return kliki
 
-def narisi_grafe(y_orig, y_filtr, sr, ovojnica_novosti, hop, udarci_v_sekundah, bpm):
+def narisi_graf(y_orig, y_filtr, sr, ovojnica_novosti, hop, udarci_v_sekundah, bpm):
     fig, axes = plt.subplots(3, 1, figsize=(12, 8))
     čas_sekunde = np.arange(len(y_orig)) / sr
 
@@ -130,14 +130,14 @@ if __name__ == "__main__":
     y, sr = nalozi_zvok(vhodna_pesem)
     print(f"Frekvenca vzorčenja: {sr} Hz | Trajanje: {len(y) / sr:.2f} sekund")
 
-    y_filtriran = filtriraj_base(y, sr)
-    S = izracunaj_stft_rocno(y_filtriran)
-    ovojnica = izracunaj_spektralni_pretok(S)
-    bpm, tau = ugotovi_bpm(ovojnica, sr, hop=512)
+    y_filtriran = filter_base(y, sr)
+    S = izracun_stft(y_filtriran)
+    ovojnica = izracun_spektralni_pretok(S)
+    bpm, tau = izracun_bpm(ovojnica, sr, hop=512)
 
     print(f"\n Tempo pesmi: {bpm:.1f} BPM <<<\n")
 
-    udarci = poisci_točne_udarce(ovojnica, tau, sr, hop=512)
+    udarci = search_udarce(ovojnica, tau, sr, hop=512)
     kliki = ustvari_zvok_metronoma(udarci, sr, len(y))
     končni_zvok = (y * 0.5) + kliki
 
@@ -145,4 +145,4 @@ if __name__ == "__main__":
         končni_zvok = končni_zvok / np.max(np.abs(končni_zvok)) * 0.95
 
     sf.write(izhodna_pesem, končni_zvok, sr)
-    narisi_grafe(y, y_filtriran, sr, ovojnica, hop=512, udarci_v_sekundah=udarci, bpm=bpm)
+    narisi_graf(y, y_filtriran, sr, ovojnica, hop=512, udarci_v_sekundah=udarci, bpm=bpm)
